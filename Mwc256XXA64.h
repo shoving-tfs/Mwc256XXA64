@@ -13,11 +13,19 @@
 // except according to those terms.
 // Modifications by Arthur O'Dwyer, 2021, under the same license.
 
+#ifdef WIN32
+#include <intrin.h>
+#pragma intrinsic(_umul128)
+#pragma intrinsic(_addcarry_u64)
+#endif
+
 static_assert(sizeof(long long) == 8, "64-bit machines only");
 
 struct Mwc256XXA64 {
     using u64 = unsigned long long;
+#ifndef WIN32
     using u128 = __uint128_t;
+#endif
 
     u64 x1_;
     u64 x2_;
@@ -37,7 +45,22 @@ struct Mwc256XXA64 {
         }
     }
 
-     constexpr u64 operator()() {
+    u64 operator()()
+    {
+#ifdef WIN32
+        u64 hi;
+        u64 lo = _umul128(x3_, 0xfeb34465'7c0af413, &hi);
+        u64 result = (x3_ ^ x2_) + (x1_ ^ hi);
+
+        u64 x1b_lo;
+        u64 x1b_hi = _addcarry_u64(0, lo, c_, &x1b_lo);
+
+        x3_ = x2_;
+        x2_ = x1_;
+        x1_ = x1b_lo;
+        c_ = u64(hi + x1b_hi);
+        return result;
+#else
         u128 hilo = x3_ * u128(0xfeb34465'7c0af413);
         u64 hi = hilo >> 64;
         u64 result = (x3_ ^ x2_) + (x1_ ^ hi);
@@ -47,5 +70,6 @@ struct Mwc256XXA64 {
         x1_ = x1b;
         c_ = hi + (x1b >> 64);
         return result;
+#endif
     }
 };
